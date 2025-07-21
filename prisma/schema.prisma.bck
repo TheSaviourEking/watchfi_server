@@ -1,0 +1,288 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums for Booking statuses
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+enum ShipmentStatus {
+  PENDING
+  SHIPPED
+  DELIVERED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+model Customer {
+  id            String          @id @default(uuid()) @db.VarChar(36)
+  pseudonym     String          @unique @db.VarChar(100)
+  bookings      Booking[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  PaymentMethod PaymentMethod[]
+
+  @@index([pseudonym])
+  @@map("customers")
+}
+
+model Booking {
+  id              String         @id @default(uuid()) @db.VarChar(36)
+  totalPrice      Decimal        @db.Decimal(10, 2)
+  discount        Decimal?       @default(0.00) @db.Decimal(10, 2)
+  paymentMethodId String?        @db.VarChar(36)
+  paymentStatus   PaymentStatus  @default(PENDING)
+  shipmentStatus  ShipmentStatus @default(PENDING)
+  status          BookingStatus  @default(PENDING)
+  shipmentAddress String?        @db.VarChar(256)
+  customerId      String         @db.VarChar(36)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  customer      Customer       @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  watches       BookingWatch[]
+  paymentMethod PaymentMethod? @relation("BookingPaymentMethod", fields: [paymentMethodId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([customerId])
+  @@index([paymentStatus])
+  @@index([shipmentStatus])
+  @@index([status])
+  @@index([createdAt])
+  @@index([paymentMethodId])
+  @@map("bookings")
+}
+
+model PaymentMethod {
+  id         String    @id @default(uuid()) @db.VarChar(36)
+  type       String    @db.VarChar(20) // e.g., "CARD", "CRYPTO"
+  gatewayId  String    @db.VarChar(64) // e.g., Stripe payment intent ID, crypto tx hash
+  details    String?   @db.VarChar(255) // e.g., last 4 digits for cards, wallet address for crypto
+  customerId String    @db.VarChar(36)
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  bookings   Booking[] @relation("BookingPaymentMethod")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([customerId])
+  @@map("payment_methods")
+}
+
+model BookingWatch {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  bookingId String   @db.VarChar(36)
+  watchId   String   @db.VarChar(36)
+  quantity  Int      @default(1)
+  unitPrice Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  watch   Watch   @relation(fields: [watchId], references: [id], onDelete: Restrict)
+
+  @@unique([bookingId, watchId])
+  @@index([bookingId])
+  @@index([watchId])
+  @@map("booking_watches")
+}
+
+model Watch {
+  id              String    @id @default(uuid()) @db.VarChar(36)
+  name            String    @unique @db.VarChar(255)
+  price           Decimal   @db.Decimal(10, 2)
+  referenceCode   String    @unique @db.VarChar(255)
+  description     String?
+  primaryPhotoUrl String    @db.VarChar(500)
+  detail          Json?
+  brandId         String    @db.VarChar(36)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  stockQuantity   Int       @default(0)
+  isAvailable     Boolean   @default(true)
+  deletedAt       DateTime?
+
+  brand                 Brand                       @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  photos                WatchPhoto[]
+  specificationHeadings WatchSpecificationHeading[]
+  colors                WatchColor[]
+  categories            WatchCategory[]
+  concepts              WatchConcept[]
+  materials             WatchMaterial[]
+  bookings              BookingWatch[]
+
+  @@index([name])
+  @@index([referenceCode])
+  @@index([brandId])
+  @@index([isAvailable, stockQuantity])
+  @@index([price])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("watches")
+}
+
+model Brand {
+  id        String    @id @default(uuid()) @db.VarChar(36)
+  name      String    @unique @db.VarChar(255)
+  logoUrl   String?   @db.VarChar(500)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  watches   Watch[]
+
+  @@index([name])
+  @@index([deletedAt])
+  @@map("brands")
+}
+
+model Color {
+  id        String       @id @default(uuid()) @db.VarChar(36)
+  name      String       @unique @db.VarChar(100)
+  hex       String?      @db.VarChar(7)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  watches   WatchColor[]
+
+  @@index([name])
+  @@map("colors")
+}
+
+model WatchColor {
+  id      String @id @default(uuid()) @db.VarChar(36)
+  watchId String @db.VarChar(36)
+  colorId String @db.VarChar(36)
+  watch   Watch  @relation(fields: [watchId], references: [id], onDelete: Cascade)
+  color   Color  @relation(fields: [colorId], references: [id], onDelete: Cascade)
+
+  @@unique([watchId, colorId])
+  @@index([watchId])
+  @@index([colorId])
+  @@map("watch_colors")
+}
+
+model Category {
+  id        String          @id @default(uuid()) @db.VarChar(36)
+  name      String          @unique @db.VarChar(100)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  watches   WatchCategory[]
+
+  @@index([name])
+  @@map("categories")
+}
+
+model WatchCategory {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  watchId    String   @db.VarChar(36)
+  categoryId String   @db.VarChar(36)
+  watch      Watch    @relation(fields: [watchId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([watchId, categoryId])
+  @@index([watchId])
+  @@index([categoryId])
+  @@map("watch_categories")
+}
+
+model Concept {
+  id        String         @id @default(uuid()) @db.VarChar(36)
+  name      String         @unique @db.VarChar(100)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  watches   WatchConcept[]
+
+  @@index([name])
+  @@map("concepts")
+}
+
+model WatchConcept {
+  id        String  @id @default(uuid()) @db.VarChar(36)
+  watchId   String  @db.VarChar(36)
+  conceptId String  @db.VarChar(36)
+  watch     Watch   @relation(fields: [watchId], references: [id], onDelete: Cascade)
+  concept   Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@unique([watchId, conceptId])
+  @@index([watchId])
+  @@index([conceptId])
+  @@map("watch_concepts")
+}
+
+model Material {
+  id        String          @id @default(uuid()) @db.VarChar(36)
+  name      String          @unique @db.VarChar(100)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  watches   WatchMaterial[]
+
+  @@index([name])
+  @@map("materials")
+}
+
+model WatchMaterial {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  watchId    String   @db.VarChar(36)
+  materialId String   @db.VarChar(36)
+  watch      Watch    @relation(fields: [watchId], references: [id], onDelete: Cascade)
+  material   Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@unique([watchId, materialId])
+  @@index([watchId])
+  @@index([materialId])
+  @@map("watch_materials")
+}
+
+model WatchSpecificationHeading {
+  id                  String                    @id @default(uuid()) @db.VarChar(36)
+  watchId             String                    @db.VarChar(36)
+  heading             String                    @db.VarChar(255)
+  description         String?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  watch               Watch                     @relation(fields: [watchId], references: [id], onDelete: Cascade)
+  specificationPoints WatchSpecificationPoint[]
+
+  @@index([watchId])
+  @@index([heading])
+  @@map("watch_specification_headings")
+}
+
+model WatchSpecificationPoint {
+  id        String                    @id @default(uuid()) @db.VarChar(36)
+  headingId String                    @db.VarChar(36)
+  label     String                    @db.VarChar(255)
+  value     String                    @db.VarChar(500)
+  createdAt DateTime                  @default(now())
+  updatedAt DateTime                  @updatedAt
+  heading   WatchSpecificationHeading @relation(fields: [headingId], references: [id], onDelete: Cascade)
+
+  @@index([headingId])
+  @@index([label])
+  @@map("watch_specification_points")
+}
+
+model WatchPhoto {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  watchId   String   @db.VarChar(36)
+  photoUrl  String   @db.VarChar(500)
+  altText   String?  @db.VarChar(255)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  watch     Watch    @relation(fields: [watchId], references: [id], onDelete: Cascade)
+
+  @@index([watchId])
+  @@index([watchId, order])
+  @@map("watch_photos")
+}
