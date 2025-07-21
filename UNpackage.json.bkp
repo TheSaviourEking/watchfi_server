@@ -1,0 +1,30 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "bun --watch src/app.ts",
+    "build": "pnpm install && rm -rf ./public && mkdir public && cd ../watchfi_vite && rm -rf ./dist && pnpm install && pnpm build && mv dist/* ../server/public",
+    "start": "NODE_ENV=prod && bun run src/app.ts",
+    "generate": "npx prisma generate",
+    "postinstall": "npx prisma generate",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.13.1",
+  "dependencies": {
+    "@fastify/cors": "^11.0.1",
+    "@fastify/static": "^8.2.0",
+    "@prisma/client": "^6.11.1",
+    "@prisma/extension-accelerate": "^2.0.2",
+    "@solana/web3.js": "^1.98.2",
+    "fastify": "^5.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.13",
+    "prisma": "^6.11.1"
+  }
+}
