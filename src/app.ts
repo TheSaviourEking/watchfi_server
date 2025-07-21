@@ -14,7 +14,7 @@ const server = fastify({
 // Register CORS plugin
 await server.register(import('@fastify/cors'), {
     origin: process.env.NODE_ENV === 'production'
-        ? ['https://watchfi-prod.onrender.com']
+        ? ['https://watchfi-server.onrender.com', 'https://watchfi-prod.onrender.com']
         : true,
     credentials: true,
 });
