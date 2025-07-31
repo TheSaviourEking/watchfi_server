@@ -1,9 +1,15 @@
 import fastify, { FastifyReply, FastifyRequest } from 'fastify';
+import multipart from "@fastify/multipart";
 import prisma from './lib/prisma.js';
 import productRoutes from './modules/products/product.route.js';
 import bookingRoutes from './modules/bookings/booking.route.js';
 import customerRoutes from './modules/customer/customer.route.js';
 import filterRoutes from './modules/filter/filter.route.js';
+import brandRoutes from './modules/brand/brands.route.js';
+import colorRoutes from './modules/colors/color.route.js';
+import conceptRoutes from './modules/concepts/concepts.route.js';
+import categoriesRoutes from './modules/categories/categories.route.js';
+import materialRoutes from './modules/materials/materials.route.js';
 
 const server = fastify({
     logger: {
@@ -11,12 +17,25 @@ const server = fastify({
     }
 });
 
+await server.register(multipart, {
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+});
+
 // Register CORS plugin
+// await server.register(import('@fastify/cors'), {
+//     origin: process.env.NODE_ENV === 'production'
+//         ? ['https://watchfi-server.onrender.com', 'https://watchfi-prod.onrender.com', "https://watchfi-client.vercel.app"]
+//         : true,
+//     credentials: true,
+// });
+
 await server.register(import('@fastify/cors'), {
     origin: process.env.NODE_ENV === 'production'
-        ? ['https://watchfi-server.onrender.com', 'https://watchfi-prod.onrender.com', "https://watchfi-client.vercel.app"]
-        : true,
-    credentials: true,
+        ? ['https://watchfi-server.onrender.com', 'https://watchfi-prod.onrender.com', "https://watchfi-client.vercel.app"] : true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Include PUT
+    allowedHeaders: ['Content-Type', 'Authorization'], // Include headers used in your requests
+    credentials: true, // If your frontend sends cookies or auth headers
+    preflight: true, // Enable preflight handling
 });
 
 // Health check endpoint
@@ -40,17 +59,22 @@ server.get('/health', async (_, reply: FastifyReply) => {
 
 // Register API routes - MOVED BEFORE setNotFoundHandler
 server.register(productRoutes, { prefix: '/api/v1/collections' });
+server.register(brandRoutes, { prefix: '/api/v1/brands' });
+server.register(colorRoutes, { prefix: '/api/v1/colors' });
+server.register(conceptRoutes, { prefix: '/api/v1/concepts' });
+server.register(categoriesRoutes, { prefix: '/api/v1/categories' });
+server.register(materialRoutes, { prefix: '/api/v1/materials' });
 server.register(bookingRoutes, { prefix: '/api/v1/bookings' });
 server.register(customerRoutes, { prefix: '/api/v1/customers' });
 server.register(filterRoutes, { prefix: '/api/v1/filter' });
 
 // Handle SPA routing: Serve index.html for all non-API routes
-server.setNotFoundHandler(async (request: FastifyRequest, reply: FastifyReply) => {
-    // Skip API routes - let them return 404 naturally
-    if (request.url.startsWith('/api')) {
-        return reply.status(404).send({ error: 'API endpoint not found' });
-    }
-});
+// server.setNotFoundHandler(async (request: FastifyRequest, reply: FastifyReply) => {
+//     // Skip API routes - let them return 404 naturally
+//     if (request.url.startsWith('/api')) {
+//         return reply.status(404).send({ error: 'API endpoint not found' });
+//     }
+// });
 
 // Start the server
 const start = async () => {
@@ -89,12 +113,14 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
+    console.log(error)
     server.log.error('Uncaught Exception:', error);
     process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
     server.log.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    console.error('Detailed Unhandled Rejection:', { promise, reason, stack: reason.stack });
     process.exit(1);
 });
 
