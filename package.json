@@ -6,9 +6,7 @@
   "scripts": {
     "dev": "bun --watch src/app.ts",
     "prebuild": "echo 'Starting build process...'",
-    "build": "pnpm install && cd ../client && pnpm install && pnpm run build && cp -r dist/* ../server/public/",
-    "build:render": "cd ../client && pnpm install && pnpm run build && mkdir -p ../server/public && mv dist/* ../server/public/ && rm -rf dist/",
-    "postbuild": "ls -la public/",
+    "build": "pnpm install",
     "start": "bun run src/app.ts",
     "generate": "npx prisma generate",
     "postinstall": "npx prisma generate",
