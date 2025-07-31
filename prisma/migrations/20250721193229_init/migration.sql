@@ -1,5 +1,5 @@
 -- CreateEnum
-CREATE TYPE "PaymentStatus" AS ENUM ('PENDING', 'PAID', 'FAILED');
+CREATE TYPE "PaymentStatus" AS ENUM ('PENDING', 'PAID', 'FAILED', 'CONFIRMING');
 
 -- CreateEnum
 CREATE TYPE "ShipmentStatus" AS ENUM ('PENDING', 'SHIPPED', 'DELIVERED');
@@ -7,10 +7,14 @@ CREATE TYPE "ShipmentStatus" AS ENUM ('PENDING', 'SHIPPED', 'DELIVERED');
 -- CreateEnum
 CREATE TYPE "BookingStatus" AS ENUM ('PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED');
 
+-- CreateEnum
+CREATE TYPE "CryptoPaymentType" AS ENUM ('SOL', 'USDC');
+
 -- CreateTable
 CREATE TABLE "customers" (
     "id" VARCHAR(36) NOT NULL,
     "pseudonym" VARCHAR(100) NOT NULL,
+    "walletAddress" VARCHAR(44),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -22,7 +26,6 @@ CREATE TABLE "bookings" (
     "id" VARCHAR(36) NOT NULL,
     "totalPrice" DECIMAL(10,2) NOT NULL,
     "discount" DECIMAL(10,2) DEFAULT 0.00,
-    "paymentMethodId" VARCHAR(64),
     "paymentStatus" "PaymentStatus" NOT NULL DEFAULT 'PENDING',
     "shipmentStatus" "ShipmentStatus" NOT NULL DEFAULT 'PENDING',
     "status" "BookingStatus" NOT NULL DEFAULT 'PENDING',
@@ -32,6 +35,25 @@ CREATE TABLE "bookings" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "bookings_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "crypto_payments" (
+    "id" VARCHAR(36) NOT NULL,
+    "bookingId" VARCHAR(36) NOT NULL,
+    "transactionHash" VARCHAR(88) NOT NULL,
+    "paymentType" "CryptoPaymentType" NOT NULL,
+    "amount" DECIMAL(18,9) NOT NULL,
+    "usdValue" DECIMAL(10,2) NOT NULL,
+    "senderWallet" VARCHAR(44) NOT NULL,
+    "receiverWallet" VARCHAR(44) NOT NULL,
+    "blockTime" TIMESTAMP(3),
+    "confirmations" INTEGER NOT NULL DEFAULT 0,
+    "isConfirmed" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "crypto_payments_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -193,10 +215,13 @@ CREATE TABLE "watch_photos" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "customers_pseudonym_key" ON "customers"("pseudonym");
+CREATE UNIQUE INDEX "customers_walletAddress_key" ON "customers"("walletAddress");
 
 -- CreateIndex
 CREATE INDEX "customers_pseudonym_idx" ON "customers"("pseudonym");
+
+-- CreateIndex
+CREATE INDEX "customers_walletAddress_idx" ON "customers"("walletAddress");
 
 -- CreateIndex
 CREATE INDEX "bookings_customerId_idx" ON "bookings"("customerId");
@@ -212,6 +237,27 @@ CREATE INDEX "bookings_status_idx" ON "bookings"("status");
 
 -- CreateIndex
 CREATE INDEX "bookings_createdAt_idx" ON "bookings"("createdAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "crypto_payments_transactionHash_key" ON "crypto_payments"("transactionHash");
+
+-- CreateIndex
+CREATE INDEX "crypto_payments_bookingId_idx" ON "crypto_payments"("bookingId");
+
+-- CreateIndex
+CREATE INDEX "crypto_payments_transactionHash_idx" ON "crypto_payments"("transactionHash");
+
+-- CreateIndex
+CREATE INDEX "crypto_payments_paymentType_idx" ON "crypto_payments"("paymentType");
+
+-- CreateIndex
+CREATE INDEX "crypto_payments_senderWallet_idx" ON "crypto_payments"("senderWallet");
+
+-- CreateIndex
+CREATE INDEX "crypto_payments_isConfirmed_idx" ON "crypto_payments"("isConfirmed");
+
+-- CreateIndex
+CREATE INDEX "crypto_payments_blockTime_idx" ON "crypto_payments"("blockTime");
 
 -- CreateIndex
 CREATE INDEX "booking_watches_bookingId_idx" ON "booking_watches"("bookingId");
@@ -338,6 +384,9 @@ CREATE INDEX "watch_photos_watchId_order_idx" ON "watch_photos"("watchId", "orde
 
 -- AddForeignKey
 ALTER TABLE "bookings" ADD CONSTRAINT "bookings_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "customers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "crypto_payments" ADD CONSTRAINT "crypto_payments_bookingId_fkey" FOREIGN KEY ("bookingId") REFERENCES "bookings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "booking_watches" ADD CONSTRAINT "booking_watches_bookingId_fkey" FOREIGN KEY ("bookingId") REFERENCES "bookings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
