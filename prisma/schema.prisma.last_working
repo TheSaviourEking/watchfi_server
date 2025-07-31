@@ -7,11 +7,12 @@ datasource db {
     url      = env("DATABASE_URL")
 }
 
+// Enums for Booking statuses
 enum PaymentStatus {
     PENDING
     PAID
     FAILED
-    CONFIRMING
+    CONFIRMING // Added for blockchain confirmation states
 }
 
 enum ShipmentStatus {
@@ -27,6 +28,7 @@ enum BookingStatus {
     COMPLETED
 }
 
+// Updated enum for crypto-only payments
 enum CryptoPaymentType {
     SOL
     USDC
@@ -34,56 +36,60 @@ enum CryptoPaymentType {
 
 model Customer {
     id            String    @id @default(uuid()) @db.VarChar(36)
-    pseudonym     String    @unique @db.VarChar(100)
-    walletAddress String?   @unique @db.VarChar(100)
+    // pseudonym     String    @unique @db.VarChar(100)
+    pseudonym     String    @db.VarChar(100)
+    walletAddress String?   @unique @db.VarChar(44) // Solana wallet address
     bookings      Booking[]
     createdAt     DateTime  @default(now())
     updatedAt     DateTime  @updatedAt
-    deletedAt     DateTime?
+    // Removed PaymentMethod relation since we're tracking crypto payments differently
 
     @@index([pseudonym])
     @@index([walletAddress])
-    @@index([deletedAt])
     @@map("customers")
 }
 
 model Booking {
-    id              String          @id @default(uuid()) @db.VarChar(36)
-    totalPrice      Decimal         @db.Decimal(10, 2)
-    discount        Decimal?        @default(0.00) @db.Decimal(10, 2)
-    paymentStatus   PaymentStatus   @default(PENDING)
-    shipmentStatus  ShipmentStatus  @default(PENDING)
-    status          BookingStatus   @default(PENDING)
-    shipmentAddress String?         @db.VarChar(256)
-    customerId      String          @db.VarChar(36)
-    createdAt       DateTime        @default(now())
-    updatedAt       DateTime        @updatedAt
-    deletedAt       DateTime?
-    customer        Customer        @relation(fields: [customerId], references: [id], onDelete: Restrict)
-    watches         BookingWatch[]
-    cryptoPayments  CryptoPayment[]
+    id              String         @id @default(uuid()) @db.VarChar(36)
+    totalPrice      Decimal        @db.Decimal(10, 2)
+    discount        Decimal?       @default(0.00) @db.Decimal(10, 2)
+    paymentStatus   PaymentStatus  @default(PENDING)
+    shipmentStatus  ShipmentStatus @default(PENDING)
+    status          BookingStatus  @default(PENDING)
+    shipmentAddress String?        @db.VarChar(256)
+    customerId      String         @db.VarChar(36)
+    createdAt       DateTime       @default(now())
+    updatedAt       DateTime       @updatedAt
+
+    customer       Customer        @relation(fields: [customerId], references: [id], onDelete: Restrict)
+    watches        BookingWatch[]
+    cryptoPayments CryptoPayment[] // New relation for crypto payments
 
     @@index([customerId])
+    @@index([paymentStatus])
+    @@index([shipmentStatus])
+    @@index([status])
     @@index([createdAt])
-    @@index([deletedAt])
     @@map("bookings")
 }
 
+// New model specifically for crypto payments
 model CryptoPayment {
     id              String            @id @default(uuid()) @db.VarChar(36)
     bookingId       String            @db.VarChar(36)
-    transactionHash String            @unique @db.VarChar(88)
+    transactionHash String            @unique @db.VarChar(88) // Solana transaction signature
     paymentType     CryptoPaymentType
-    amount          Decimal           @db.Decimal(18, 6)
-    usdValue        Decimal           @db.Decimal(10, 2)
-    senderWallet    String            @db.VarChar(100)
-    receiverWallet  String            @db.VarChar(100)
-    blockTime       DateTime?
+    amount          Decimal           @db.Decimal(18, 9) // Higher precision for crypto
+    usdValue        Decimal           @db.Decimal(10, 2) // USD equivalent at time of payment
+    senderWallet    String            @db.VarChar(44) // Customer's wallet address
+    receiverWallet  String            @db.VarChar(44) // Business wallet address
+    blockTime       DateTime? // When transaction was confirmed on blockchain
     confirmations   Int               @default(0)
     isConfirmed     Boolean           @default(false)
     createdAt       DateTime          @default(now())
     updatedAt       DateTime          @updatedAt
-    booking         Booking           @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+    booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
     @@index([bookingId])
     @@index([transactionHash])
@@ -94,6 +100,7 @@ model CryptoPayment {
     @@map("crypto_payments")
 }
 
+// Keep existing models unchanged
 model BookingWatch {
     id        String   @id @default(uuid()) @db.VarChar(36)
     bookingId String   @db.VarChar(36)
@@ -102,8 +109,9 @@ model BookingWatch {
     unitPrice Decimal  @db.Decimal(10, 2)
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
-    booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-    watch     Watch    @relation(fields: [watchId], references: [id], onDelete: Restrict)
+
+    booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+    watch   Watch   @relation(fields: [watchId], references: [id], onDelete: Restrict)
 
     @@unique([bookingId, watchId])
     @@index([bookingId])
@@ -114,12 +122,11 @@ model BookingWatch {
 model Watch {
     id              String    @id @default(uuid()) @db.VarChar(36)
     name            String    @unique @db.VarChar(255)
-    // price           Decimal   @db.Decimal(10, 2)
-    price           BigInt
+    price           Decimal   @db.Decimal(10, 2)
     referenceCode   String    @unique @db.VarChar(255)
     description     String?
     primaryPhotoUrl String    @db.VarChar(500)
-    detail          String?
+    detail          Json?
     brandId         String    @db.VarChar(36)
     createdAt       DateTime  @default(now())
     updatedAt       DateTime  @updatedAt
@@ -147,14 +154,13 @@ model Watch {
 }
 
 model Brand {
-    id          String    @id @default(uuid()) @db.VarChar(36)
-    name        String    @unique @db.VarChar(255)
-    description String?
-    logoUrl     String?   @db.VarChar(500)
-    createdAt   DateTime  @default(now())
-    updatedAt   DateTime  @updatedAt
-    deletedAt   DateTime?
-    watches     Watch[]
+    id        String    @id @default(uuid()) @db.VarChar(36)
+    name      String    @unique @db.VarChar(255)
+    logoUrl   String?   @db.VarChar(500)
+    createdAt DateTime  @default(now())
+    updatedAt DateTime  @updatedAt
+    deletedAt DateTime?
+    watches   Watch[]
 
     @@index([name])
     @@index([deletedAt])

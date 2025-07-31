@@ -114,12 +114,11 @@ model BookingWatch {
 model Watch {
     id              String    @id @default(uuid()) @db.VarChar(36)
     name            String    @unique @db.VarChar(255)
-    // price           Decimal   @db.Decimal(10, 2)
-    price           BigInt
+    price           Decimal   @db.Decimal(10, 2)
     referenceCode   String    @unique @db.VarChar(255)
     description     String?
     primaryPhotoUrl String    @db.VarChar(500)
-    detail          String?
+    detail          Json?
     brandId         String    @db.VarChar(36)
     createdAt       DateTime  @default(now())
     updatedAt       DateTime  @updatedAt
@@ -147,14 +146,13 @@ model Watch {
 }
 
 model Brand {
-    id          String    @id @default(uuid()) @db.VarChar(36)
-    name        String    @unique @db.VarChar(255)
-    description String?
-    logoUrl     String?   @db.VarChar(500)
-    createdAt   DateTime  @default(now())
-    updatedAt   DateTime  @updatedAt
-    deletedAt   DateTime?
-    watches     Watch[]
+    id        String    @id @default(uuid()) @db.VarChar(36)
+    name      String    @unique @db.VarChar(255)
+    logoUrl   String?   @db.VarChar(500)
+    createdAt DateTime  @default(now())
+    updatedAt DateTime  @updatedAt
+    deletedAt DateTime?
+    watches   Watch[]
 
     @@index([name])
     @@index([deletedAt])
