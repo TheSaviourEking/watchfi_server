@@ -38,6 +38,15 @@ await server.register(import('@fastify/cors'), {
     preflight: true, // Enable preflight handling
 });
 
+server.setSerializerCompiler(() => {
+    return (data) => JSON.stringify(data, (key, value) => {
+        if (typeof value === 'bigint') {
+            return Number(value); // or value.toString() for string
+        }
+        return value;
+    });
+});
+
 // Health check endpoint
 server.get('/health', async (_, reply: FastifyReply) => {
     try {
