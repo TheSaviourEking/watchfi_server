@@ -797,7 +797,7 @@ async function postWatchHandler(request: FastifyRequest, reply: FastifyReply) {
                 data: {
                     name,
                     // price: Number(usdToCents(Number(price.toString()))),
-                    price: price,
+                    price: usdToCents(price),
                     referenceCode,
                     description: description || null,
                     // detail: detail ? JSON.parse(detail) : null,
@@ -1248,7 +1248,7 @@ async function putWatchHandler(request: FastifyRequest, reply: FastifyReply) {
                 where: { id },
                 data: {
                     name,
-                    price: usdToCents(parsedPrice),
+                    price: usdToCents(price),
                     referenceCode,
                     description: description || null,
                     detail: detail ? JSON.parse(detail) : null,
