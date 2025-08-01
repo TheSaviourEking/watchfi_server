@@ -31,7 +31,7 @@ await server.register(multipart, {
 
 await server.register(import('@fastify/cors'), {
     origin: process.env.NODE_ENV === 'production'
-        ? ['http://204.236.211.44', 'https://watchfi-server.onrender.com', 'https://watchfi-prod.onrender.com'] : true,
+        ? ['http://204.236.211.44', 'https://watchfi-server.onrender.com', 'https://watchfi-prod.onrender.com', "watchfi-client.vercel.app"] : true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Include PUT
     allowedHeaders: ['Content-Type', 'Authorization'], // Include headers used in your requests
     credentials: true, // If your frontend sends cookies or auth headers
