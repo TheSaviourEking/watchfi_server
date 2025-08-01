@@ -446,7 +446,7 @@ function sanitizeForCloudinary(name) {
         || 'unnamed'; // Fallback if result is empty
 }
 
-async function postWatchHandler(request: FastifyRequest, reply: FastifyReply) {
+async function postWatchHandle(request: FastifyRequest, reply: FastifyReply) {
     try {
         // Test Cloudinary configuration
         const configTest = await testCloudinaryConfig();
@@ -915,6 +915,509 @@ async function postWatchHandler(request: FastifyRequest, reply: FastifyReply) {
                 price: Number(newWatc.price),
             }
         });
+
+        return reply.status(201).send({ data: watch });
+    } catch (error) {
+        console.error("Error creating watch:", error);
+        if (error.code === "P2002") {
+            return reply.status(400).send({ error: "Watch name or referenceCode already exists." });
+        }
+        return reply.status(500).send({ error: `Failed to create watch: ${error.message}` });
+    }
+}
+
+async function postWatchHandler(request: FastifyRequest, reply: FastifyReply) {
+    try {
+        // Test Cloudinary configuration
+        const configTest = await testCloudinaryConfig();
+        if (!configTest.success) {
+            console.error("Cloudinary configuration test failed:", configTest.message);
+            return reply.status(500).send({ error: `Configuration error: ${configTest.message}` });
+        }
+
+        // Initialize data storage
+        const data = {
+            fields: {},
+            files: {},
+        };
+
+        // Parse multipart/form-data
+        for await (const part of request.parts()) {
+            if (part.file) {
+                const fieldName = part.fieldname;
+                const fileName = part.filename || `unnamed_${Date.now()}`;
+                const fileData = await part.toBuffer();
+                console.log(`Received file: ${fieldName}, name: ${fileName}, size: ${fileData.length} bytes, mimetype: ${part.mimetype}`);
+                data.files[fieldName] = data.files[fieldName] || [];
+                data.files[fieldName].push({
+                    name: fileName,
+                    data: fileData,
+                    mimetype: part.mimetype,
+                });
+            } else {
+                console.log(`Received field: ${part.fieldname}, value: ${part.value}`);
+                data.fields[part.fieldname] = part.value;
+            }
+        }
+
+        // Extract and validate fields
+        const {
+            name,
+            price,
+            referenceCode,
+            description,
+            detail,
+            brandId,
+            newBrand,
+            newBrandDescription,
+            newBrandLogoUrl,
+            logoInputType,
+            stockQuantity,
+            isAvailable,
+            colors,
+            categories,
+            concepts,
+            materials,
+            specifications,
+            primaryPhotoAltText,
+            existingPrimaryUrl,
+            existingSecondaryUrls,
+            removedImages,
+            newColors,
+            newCategories,
+            newConcepts,
+            newMaterials,
+        } = data.fields;
+
+        // Validate unique name and referenceCode
+        const existingWatch = await prisma.watch.findFirst({
+            where: { OR: [{ name }, { referenceCode }] },
+        });
+        if (existingWatch) {
+            console.log("Validation failed: Duplicate name or referenceCode");
+            return reply.status(400).send({ error: "Watch name or referenceCode already exists." });
+        }
+
+        // Validate required fields
+        if (!name || typeof name !== "string" || name.length > 255) {
+            console.log("Validation failed: Invalid or missing name");
+            return reply.status(400).send({ error: "Invalid or missing name. Must be a string up to 255 characters." });
+        }
+        const parsedPrice = parseFloat(price || "0");
+        if (isNaN(parsedPrice) || parsedPrice < 0 || parsedPrice > 99999999.99) {
+            console.log("Validation failed: Invalid or missing price");
+            return reply.status(400).send({ error: "Invalid or missing price. Must be a number between 0 and 99999999.99." });
+        }
+        if (!referenceCode || typeof referenceCode !== "string" || referenceCode.length > 255) {
+            console.log("Validation failed: Invalid or missing referenceCode");
+            return reply.status(400).send({ error: "Invalid or missing referenceCode. Must be a string up to 255 characters." });
+        }
+        if (description && (typeof description !== "string" || description.length > 1000)) {
+            console.log("Validation failed: Invalid description");
+            return reply.status(400).send({ error: "Invalid description. Must be a string up to 1000 characters or omitted." });
+        }
+        if (detail && typeof detail !== "string") {
+            console.log("Validation failed: Invalid detail");
+            return reply.status(400).send({ error: "Invalid detail. Must be a string or omitted." });
+        }
+        const parsedStockQuantity = parseInt(stockQuantity || "0");
+        if (isNaN(parsedStockQuantity) || parsedStockQuantity < 0) {
+            console.log("Validation failed: Invalid stockQuantity");
+            return reply.status(400).send({ error: "Invalid stockQuantity. Must be a non-negative number." });
+        }
+        const parsedIsAvailable = isAvailable === "true";
+        if (typeof parsedIsAvailable !== "boolean") {
+            console.log("Validation failed: Invalid isAvailable");
+            return reply.status(400).send({ error: "Invalid isAvailable. Must be a boolean." });
+        }
+        if (parsedStockQuantity === 0 && parsedIsAvailable) {
+            console.log("Validation failed: Invalid isAvailable with zero stock");
+            return reply.status(400).send({ error: "Invalid isAvailable. Must be false if stockQuantity is 0." });
+        }
+
+        // Parse complex fields
+        let parsedColors, parsedCategories, parsedConcepts, parsedMaterials, parsedSpecifications, parsedExistingSecondaryUrls, parsedRemovedImages, parsedNewColors, parsedNewCategories, parsedNewConcepts, parsedNewMaterials;
+        try {
+            parsedColors = JSON.parse(colors || "[]");
+            parsedCategories = JSON.parse(categories || "[]");
+            parsedConcepts = JSON.parse(concepts || "[]");
+            parsedMaterials = JSON.parse(materials || "[]");
+            parsedSpecifications = JSON.parse(specifications || "[]");
+            parsedExistingSecondaryUrls = JSON.parse(existingSecondaryUrls || "[]");
+            parsedRemovedImages = JSON.parse(removedImages || "{}");
+            parsedNewColors = JSON.parse(newColors || "[]");
+            parsedNewCategories = JSON.parse(newCategories || "[]");
+            parsedNewConcepts = JSON.parse(newConcepts || "[]");
+            parsedNewMaterials = JSON.parse(newMaterials || "[]");
+        } catch (error) {
+            console.log("Validation failed: JSON parsing error", error);
+            return reply.status(400).send({ error: `Invalid JSON in fields: ${error.message}` });
+        }
+
+        // Validate related IDs
+        if (parsedColors.length > 0) {
+            const validColors = await prisma.color.findMany({ where: { id: { in: parsedColors } } });
+            if (validColors.length !== parsedColors.length) {
+                console.log("Validation failed: Invalid color IDs");
+                return reply.status(400).send({ error: "One or more color IDs are invalid or deleted." });
+            }
+        }
+        if (parsedCategories.length > 0) {
+            const validCategories = await prisma.category.findMany({ where: { id: { in: parsedCategories } } });
+            if (validCategories.length !== parsedCategories.length) {
+                console.log("Validation failed: Invalid category IDs");
+                return reply.status(400).send({ error: "One or more category IDs are invalid or deleted." });
+            }
+        }
+        if (parsedConcepts.length > 0) {
+            const validConcepts = await prisma.concept.findMany({ where: { id: { in: parsedConcepts } } });
+            if (validConcepts.length !== parsedConcepts.length) {
+                console.log("Validation failed: Invalid concept IDs");
+                return reply.status(400).send({ error: "One or more concept IDs are invalid or deleted." });
+            }
+        }
+        if (parsedMaterials.length > 0) {
+            const validMaterials = await prisma.material.findMany({ where: { id: { in: parsedMaterials } } });
+            if (validMaterials.length !== parsedMaterials.length) {
+                console.log("Validation failed: Invalid material IDs");
+                return reply.status(400).send({ error: "One or more material IDs are invalid or deleted." });
+            }
+        }
+
+        // Validate specification headings and points
+        if (parsedSpecifications.length > 0) {
+            for (const heading of parsedSpecifications) {
+                if (!heading.heading || typeof heading.heading !== "string" || heading.heading.length > 255) {
+                    console.log("Validation failed: Invalid specification heading");
+                    return reply.status(400).send({ error: "Invalid heading in specifications. Must be a string up to 255 characters." });
+                }
+                if (heading.description && (typeof heading.description !== "string" || heading.description.length > 255)) {
+                    console.log("Validation failed: Invalid specification description");
+                    return reply.status(400).send({ error: "Invalid description in specifications. Must be a string up to 255 characters or omitted." });
+                }
+                if (heading.specificationOptions && heading.specificationOptions.length > 0) {
+                    for (const point of heading.specificationOptions) {
+                        if (!point.label || typeof point.label !== "string" || point.label.length > 255) {
+                            console.log("Validation failed: Invalid specification option label");
+                            return reply.status(400).send({ error: "Invalid label in specificationOptions. Must be a string up to 255 characters." });
+                        }
+                        if (!point.value || typeof point.value !== "string" || point.value.length > 500) {
+                            console.log("Validation failed: Invalid specification option value");
+                            return reply.status(400).send({ error: "Invalid value in specificationOptions. Must be a string up to 500 characters." });
+                        }
+                    }
+                } else {
+                    console.log("Validation failed: Missing specification options");
+                    return reply.status(400).send({ error: "At least one specification option is required per heading." });
+                }
+            }
+        } else {
+            console.log("Validation failed: Missing specifications");
+            return reply.status(400).send({ error: "At least one specification is required." });
+        }
+
+        // Generate a unique identifier for Cloudinary paths
+        const watchId = generateWatchId();
+
+        // Handle brand creation or lookup
+        let finalBrandId = brandId !== "other" ? brandId : null;
+        let brandLogoUrlValue = newBrandLogoUrl;
+
+        if (!finalBrandId || typeof finalBrandId !== "string" || !UUID_REGEX.test(finalBrandId)) {
+            if (!brandId && newBrand) {
+                const existingBrand = await prisma.brand.findFirst({
+                    where: { name: newBrand },
+                });
+                if (existingBrand) {
+                    finalBrandId = existingBrand.id;
+                    brandLogoUrlValue = existingBrand.logoUrl;
+                } else {
+                    if (data.files.newBrandLogoFile && data.files.newBrandLogoFile.length > 0 && logoInputType === "file") {
+                        try {
+                            brandLogoUrlValue = await uploadToCloudinary(
+                                data.files.newBrandLogoFile[0].data,
+                                { name: data.files.newBrandLogoFile[0].name, mimetype: data.files.newBrandLogoFile[0].mimetype },
+                                `${APPNAME}/brands/${sanitizeForCloudinary(newBrand)}`,
+                                { maxFileSize: 5 * 1024 * 1024, timeout: 30000, maxWidth: 300, maxHeight: 300 }
+                            );
+                        } catch (error) {
+                            console.error("Brand logo upload failed:", error);
+                            return reply.status(400).send({ error: `Failed to upload brand logo: ${error.message}` });
+                        }
+                    } else if (newBrandLogoUrl && logoInputType === "url") {
+                        brandLogoUrlValue = newBrandLogoUrl;
+                    } else {
+                        console.log("Validation failed: Missing brand logo file or URL");
+                        return reply.status(400).send({ error: "Brand logo (file or URL) is required for new brand." });
+                    }
+
+                    const newBrandData = await prisma.brand.create({
+                        data: {
+                            name: newBrand,
+                            logoUrl: brandLogoUrlValue,
+                            description: newBrandDescription || null,
+                        },
+                    });
+                    finalBrandId = newBrandData.id;
+                }
+            } else {
+                console.log("Validation failed: Invalid or missing brandId");
+                return reply.status(400).send({ error: "Invalid or missing brandId. Must be a valid UUID or 'other' with newBrand." });
+            }
+        }
+
+        // Validate brand exists
+        const brand = await prisma.brand.findUnique({ where: { id: finalBrandId } });
+        if (!brand) {
+            console.log("Validation failed: Brand not found");
+            return reply.status(400).send({ error: "Brand not found or deleted." });
+        }
+
+        // Handle file uploads for watch images (outside transaction)
+        let primaryImageUrl = existingPrimaryUrl;
+        let photos = parsedExistingSecondaryUrls.map((photo, index) => ({
+            photoUrl: photo.photoUrl || photo.url || "",
+            altText: photo.altText || "",
+            order: photo.order || index + 1,
+        }));
+
+        // Upload new primary photo if provided
+        if (data.files.primaryPhoto && data.files.primaryPhoto.length > 0) {
+            try {
+                primaryImageUrl = await uploadToCloudinary(
+                    data.files.primaryPhoto[0].data,
+                    { name: data.files.primaryPhoto[0].name, mimetype: data.files.primaryPhoto[0].mimetype },
+                    `${APPNAME}/watches/${sanitizeForCloudinary(watchId)}/primary`,
+                    { maxFileSize: 5 * 1024 * 1024, timeout: 30000, maxWidth: 1200, maxHeight: 1200 }
+                );
+            } catch (primaryError) {
+                console.error("Primary photo upload failed:", primaryError);
+                return reply.status(400).send({ error: `Failed to upload primary photo: ${primaryError.message}` });
+            }
+        }
+        if (!primaryImageUrl || typeof primaryImageUrl !== "string" || primaryImageUrl.length > 500) {
+            console.log("Validation failed: Invalid or missing primaryPhotoUrl");
+            return reply.status(400).send({ error: "Invalid or missing primaryPhotoUrl. Must be a string up to 500 characters." });
+        }
+
+        // Upload new secondary photos if provided
+        if (data.files.secondaryPhotos && data.files.secondaryPhotos.length > 0) {
+            try {
+                const uploadedUrls = await uploadMultipleToCloudinary(
+                    data.files.secondaryPhotos,
+                    `${APPNAME}/watches/${sanitizeForCloudinary(watchId)}/secondary`,
+                    { maxFileSize: 5 * 1024 * 1024, timeout: 30000, maxWidth: 1200, maxHeight: 1200 }
+                );
+                photos.push(
+                    ...uploadedUrls.map((url, index) => ({
+                        photoUrl: url,
+                        altText: primaryPhotoAltText || "",
+                        order: photos.length + index + 1,
+                    }))
+                );
+            } catch (secondaryError) {
+                console.error("Secondary photos upload failed:", secondaryError);
+                return reply.status(400).send({ error: `Failed to upload secondary photos: ${secondaryError.message}` });
+            }
+        }
+
+        // Validate photos
+        for (const photo of photos) {
+            if (!photo.photoUrl || typeof photo.photoUrl !== "string" || photo.photoUrl.length > 500) {
+                console.log("Validation failed: Invalid photoUrl in photos");
+                return reply.status(400).send({ error: "Invalid photoUrl in photos. Must be a string up to 500 characters." });
+            }
+            if (photo.altText && (typeof photo.altText !== "string" || photo.altText.length > 255)) {
+                console.log("Validation failed: Invalid altText in photos");
+                return reply.status(400).send({ error: "Invalid altText in photos. Must be a string up to 255 characters or omitted." });
+            }
+            if (typeof photo.order !== "number" || !Number.isInteger(photo.order) || photo.order < 0) {
+                console.log("Validation failed: Invalid order in photos");
+                return reply.status(400).send({ error: "Invalid order in photos. Must be a non-negative integer." });
+            }
+        }
+
+        // Handle removed images
+        if (parsedRemovedImages.primary && existingPrimaryUrl) {
+            try {
+                await deleteFromCloudinary(existingPrimaryUrl);
+            } catch (deleteError) {
+                console.error("Failed to delete primary image:", deleteError);
+            }
+        }
+        if (parsedRemovedImages.secondary && parsedRemovedImages.secondary.length > 0) {
+            try {
+                await deleteMultipleFromCloudinary(parsedRemovedImages.secondary);
+                await prisma.watchPhoto.deleteMany({
+                    where: { photoUrl: { in: parsedRemovedImages.secondary } },
+                });
+            } catch (deleteError) {
+                console.error("Failed to delete secondary images:", deleteError);
+            }
+        }
+
+        // Create watch and related data in a transaction
+        const watch = await prisma.$transaction(async (prisma) => {
+            console.log("Starting transaction for watch creation");
+            const newWatch = await prisma.watch.create({
+                data: {
+                    name,
+                    price: usdToCents(parsedPrice),
+                    referenceCode,
+                    description: description || null,
+                    detail: detail ? detail.toString() : null,
+                    primaryPhotoUrl: primaryImageUrl,
+                    brandId: finalBrandId,
+                    stockQuantity: parsedStockQuantity,
+                    isAvailable: parsedIsAvailable,
+                },
+            });
+            console.log("Watch created:", newWatch.id);
+
+            if (parsedColors.length > 0) {
+                await prisma.watchColor.createMany({
+                    data: parsedColors.map((colorId) => ({
+                        watchId: newWatch.id,
+                        colorId,
+                    })),
+                });
+                console.log("Watch colors created");
+            }
+
+            if (parsedCategories.length > 0) {
+                await prisma.watchCategory.createMany({
+                    data: parsedCategories.map((categoryId) => ({
+                        watchId: newWatch.id,
+                        categoryId,
+                    })),
+                });
+                console.log("Watch categories created");
+            }
+
+            if (parsedConcepts.length > 0) {
+                await prisma.watchConcept.createMany({
+                    data: parsedConcepts.map((conceptId) => ({
+                        watchId: newWatch.id,
+                        conceptId,
+                    })),
+                });
+                console.log("Watch concepts created");
+            }
+
+            if (parsedMaterials.length > 0) {
+                await prisma.watchMaterial.createMany({
+                    data: parsedMaterials.map((materialId) => ({
+                        watchId: newWatch.id,
+                        materialId,
+                    })),
+                });
+                console.log("Watch materials created");
+            }
+
+            if (photos.length > 0) {
+                await prisma.watchPhoto.createMany({
+                    data: photos.map((photo) => ({
+                        watchId: newWatch.id,
+                        photoUrl: photo.photoUrl,
+                        altText: photo.altText || null,
+                        order: photo.order,
+                    })),
+                });
+                console.log("Watch photos created");
+            }
+
+            if (parsedSpecifications.length > 0) {
+                const headingData = [];
+                const pointData = [];
+
+                for (const heading of parsedSpecifications) {
+                    headingData.push({
+                        watchId: newWatch.id,
+                        heading: heading.heading,
+                        description: heading.description || null,
+                    });
+
+                    if (heading.specificationOptions && heading.specificationOptions.length > 0) {
+                        heading.specificationOptions.forEach((point) => {
+                            pointData.push({
+                                headingId: null, // Will be updated after heading creation
+                                label: point.label,
+                                value: point.value,
+                            });
+                        });
+                    }
+                }
+
+                console.log("Creating specification headings");
+                await prisma.watchSpecificationHeading.createMany({
+                    data: headingData,
+                });
+
+                const createdHeadings = await prisma.watchSpecificationHeading.findMany({
+                    where: { watchId: newWatch.id },
+                    select: { id: true, heading: true },
+                });
+                const headingIds = createdHeadings.reduce((acc, h) => {
+                    acc[h.heading] = h.id;
+                    return acc;
+                }, {});
+
+                let pointIndex = 0;
+                for (const heading of parsedSpecifications) {
+                    if (heading.specificationOptions && heading.specificationOptions.length > 0) {
+                        for (let i = 0; i < heading.specificationOptions.length; i++) {
+                            pointData[pointIndex].headingId = headingIds[heading.heading];
+                            pointIndex++;
+                        }
+                    }
+                }
+
+                console.log("Creating specification points");
+                await prisma.watchSpecificationPoint.createMany({
+                    data: pointData,
+                });
+                console.log("Specification points created");
+            }
+
+            console.log("Fetching watch data");
+            const newWatchData = await prisma.watch.findUnique({
+                where: { id: newWatch.id },
+                select: {
+                    id: true,
+                    name: true,
+                    price: true,
+                    referenceCode: true,
+                    description: true,
+                    detail: true,
+                    primaryPhotoUrl: true,
+                    brandId: true,
+                    stockQuantity: true,
+                    isAvailable: true,
+                    createdAt: true,
+                    updatedAt: true,
+                    brand: { select: { id: true, name: true, logoUrl: true } },
+                    colors: { select: { color: { select: { id: true, name: true } } } },
+                    categories: { select: { category: { select: { id: true, name: true } } } },
+                    concepts: { select: { concept: { select: { id: true, name: true } } } },
+                    materials: { select: { material: { select: { id: true, name: true } } } },
+                    photos: { select: { id: true, photoUrl: true, altText: true, order: true } },
+                    specificationHeadings: {
+                        select: {
+                            id: true,
+                            heading: true,
+                            description: true,
+                            specificationPoints: { select: { id: true, label: true, value: true } },
+                        },
+                    },
+                },
+            });
+
+            console.log("Transaction completed");
+            return {
+                ...newWatchData,
+                price: Number(newWatchData.price),
+            };
+        }, { timeout: 30000 }); // Increased timeout to 30 seconds
 
         return reply.status(201).send({ data: watch });
     } catch (error) {
