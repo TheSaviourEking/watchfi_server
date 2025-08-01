@@ -1,6 +1,8 @@
 import { FastifyReply, FastifyRequest } from "fastify";
 import prisma from "../../lib/prisma";
 
+const APPNAME = process.env.APPNAME ? process.env.APPNAME : process.env.NODE_ENV === 'development' ? 'watchfi_dev' : 'watchfi_prod';
+
 // Define params interface
 interface WatchParams {
     id: string;
@@ -410,23 +412,6 @@ const getWatchByIdHandler = async (
     }
 }
 
-interface CreateWatchBody {
-    name: string
-    price: number
-    referenceCode: string
-    description?: string
-    detail?: any
-    primaryPhotoUrl: string
-    brandId: string
-    stockQuantity?: number
-    isAvailable?: boolean
-    colors?: string[]
-    categories?: string[]
-    concepts?: string[]
-    materials?: string[]
-    photos?: { photoUrl: string; altText?: string; order?: number }[]
-    specificationHeadings?: { heading: string; description?: string; specificationPoints?: { label: string; value: string }[] }[]
-}
 
 import {
     uploadToCloudinary,
@@ -444,6 +429,21 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 // Helper function to generate a unique identifier for Cloudinary paths
 function generateWatchId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
+
+function sanitizeForCloudinary(name) {
+    if (!name || typeof name !== 'string') {
+        return 'unnamed'; // Fallback for invalid input
+    }
+
+    return name
+        .replace(/[&]/g, 'and')           // Replace & with 'and'
+        .replace(/\s+/g, '_')             // Replace spaces with underscores
+        .replace(/[^a-zA-Z0-9\-_]/g, '_') // Replace other special chars with underscore
+        .replace(/_{2,}/g, '_')           // Replace multiple underscores with single
+        .replace(/^_|_$/g, '')            // Remove leading/trailing underscores
+        .toLowerCase()                    // Convert to lowercase for consistency
+        || 'unnamed'; // Fallback if result is empty
 }
 
 async function postWatchHandler(request: FastifyRequest, reply: FastifyReply) {
@@ -644,7 +644,6 @@ async function postWatchHandler(request: FastifyRequest, reply: FastifyReply) {
 
         // Generate a unique identifier for Cloudinary paths
         const watchId = generateWatchId();
-        const APPNAME = "watchfi";
 
         // Handle brand creation or lookup
         let finalBrandId = brandId !== "other" ? brandId : null;
@@ -664,7 +663,7 @@ async function postWatchHandler(request: FastifyRequest, reply: FastifyReply) {
                             brandLogoUrlValue = await uploadToCloudinary(
                                 data.files.newBrandLogoFile[0].data,
                                 { name: data.files.newBrandLogoFile[0].name, mimetype: data.files.newBrandLogoFile[0].mimetype },
-                                `${APPNAME}/brands/${newBrand}`,
+                                `${APPNAME}/brands/${sanitizeForCloudinary(newBrand)}`,
                                 { maxFileSize: 5 * 1024 * 1024, timeout: 30000, maxWidth: 300, maxHeight: 300 }
                             );
                         } catch (error) {
@@ -714,7 +713,7 @@ async function postWatchHandler(request: FastifyRequest, reply: FastifyReply) {
                 primaryImageUrl = await uploadToCloudinary(
                     data.files.primaryPhoto[0].data,
                     { name: data.files.primaryPhoto[0].name, mimetype: data.files.primaryPhoto[0].mimetype },
-                    `${APPNAME}/watches/${watchId}/primary`,
+                    `${APPNAME}/watches/${sanitizeForCloudinary(watchId)}/primary`,
                     { maxFileSize: 5 * 1024 * 1024, timeout: 30000, maxWidth: 1200, maxHeight: 1200 }
                 );
             } catch (primaryError) {
@@ -732,7 +731,7 @@ async function postWatchHandler(request: FastifyRequest, reply: FastifyReply) {
             try {
                 const uploadedUrls = await uploadMultipleToCloudinary(
                     data.files.secondaryPhotos,
-                    `${APPNAME}/watches/${watchId}/secondary`,
+                    `${APPNAME}/watches/${sanitizeForCloudinary(watchId)}/secondary`,
                     { maxFileSize: 5 * 1024 * 1024, timeout: 30000, maxWidth: 1200, maxHeight: 1200 }
                 );
                 photos.push(
@@ -1103,7 +1102,6 @@ async function putWatchHandler(request: FastifyRequest, reply: FastifyReply) {
 
         // Generate a unique identifier for Cloudinary paths
         const watchId = generateWatchId();
-        const APPNAME = "watchfi";
 
         // Handle brand creation or lookup
         let finalBrandId = brandId !== "other" ? brandId : null;
@@ -1123,9 +1121,10 @@ async function putWatchHandler(request: FastifyRequest, reply: FastifyReply) {
                             brandLogoUrlValue = await uploadToCloudinary(
                                 data.files.newBrandLogoFile[0].data,
                                 { name: data.files.newBrandLogoFile[0].name, mimetype: data.files.newBrandLogoFile[0].mimetype },
-                                `${APPNAME}/brands/${newBrand}`,
+                                `${APPNAME}/brands/${sanitizeForCloudinary(newBrand)}`, // ✅ SANITIZED
                                 { maxFileSize: 5 * 1024 * 1024, timeout: 30000, maxWidth: 300, maxHeight: 300 }
                             );
+
                         } catch (error) {
                             console.error("Brand logo upload failed:", error);
                             return reply.status(400).send({ error: `Failed to upload brand logo: ${error.message}` });
@@ -1173,7 +1172,7 @@ async function putWatchHandler(request: FastifyRequest, reply: FastifyReply) {
                 primaryImageUrl = await uploadToCloudinary(
                     data.files.primaryPhoto[0].data,
                     { name: data.files.primaryPhoto[0].name, mimetype: data.files.primaryPhoto[0].mimetype },
-                    `${APPNAME}/watches/${watchId}/primary`,
+                    `${APPNAME}/watches/${sanitizeForCloudinary(watchId)}/primary`,
                     { maxFileSize: 5 * 1024 * 1024, timeout: 30000, maxWidth: 1200, maxHeight: 1200 }
                 );
             } catch (primaryError) {
@@ -1191,7 +1190,7 @@ async function putWatchHandler(request: FastifyRequest, reply: FastifyReply) {
             try {
                 const uploadedUrls = await uploadMultipleToCloudinary(
                     data.files.secondaryPhotos,
-                    `${APPNAME}/watches/${watchId}/secondary`,
+                    `${APPNAME}/watches/${sanitizeForCloudinary(watchId)}/secondary`,
                     { maxFileSize: 5 * 1024 * 1024, timeout: 30000, maxWidth: 1200, maxHeight: 1200 }
                 );
                 photos.push(
