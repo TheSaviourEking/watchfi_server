@@ -31,12 +31,14 @@ await server.register(multipart, {
 
 await server.register(import('@fastify/cors'), {
     origin: process.env.NODE_ENV === 'production'
-        ? ['https://watchfi-server.onrender.com', 'https://watchfi-prod.onrender.com', "https://watchfi-client.vercel.app"] : true,
+        ? ['http://204.236.211.44', 'https://watchfi-server.onrender.com', 'https://watchfi-prod.onrender.com'] : true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Include PUT
     allowedHeaders: ['Content-Type', 'Authorization'], // Include headers used in your requests
     credentials: true, // If your frontend sends cookies or auth headers
     preflight: true, // Enable preflight handling
 });
+
+
 
 server.setSerializerCompiler(() => {
     return (data) => JSON.stringify(data, (key, value) => {
