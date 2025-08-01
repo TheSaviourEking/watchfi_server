@@ -39,7 +39,7 @@ export async function testCloudinaryConfig(): Promise<{ success: boolean; messag
 export async function uploadToCloudinary(
     fileData: Buffer,
     fileInfo: { name?: string; mimetype?: string },
-    folder: string = 'watchfi',
+    folder: string = process.env.APPNAME || process.env.NODE_ENV === 'development' ? "watchfi_dev" : 'watchfi_prod',
     options: {
         maxFileSize?: number;
         timeout?: number;
@@ -140,7 +140,7 @@ export async function uploadToCloudinary(
 // Upload multiple files to Cloudinary
 export async function uploadMultipleToCloudinary(
     files: Array<{ data: Buffer; name: string; mimetype: string }>,
-    folder: string = 'watchfi',
+    folder: string = process.env.APPNAME || process.env.NODE_ENV === 'development' ? "watchfi_dev" : 'watchfi_prod',
     options?: Parameters<typeof uploadToCloudinary>[3]
 ): Promise<string[]> {
     const results: string[] = [];
