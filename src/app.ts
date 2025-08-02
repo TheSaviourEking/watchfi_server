@@ -29,14 +29,14 @@ await server.register(multipart, {
 //     credentials: true,
 // });
 
-await server.register(import('@fastify/cors'), {
-    origin: process.env.NODE_ENV === 'production'
-        ? ['http://204.236.211.44', 'https://watchfi-server.onrender.com', 'https://watchfi-prod.onrender.com', "https://watchfi-client.vercel.app"] : true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Include PUT
-    allowedHeaders: ['Content-Type', 'Authorization'], // Include headers used in your requests
-    credentials: true, // If your frontend sends cookies or auth headers
-    preflight: true, // Enable preflight handling
-});
+// await server.register(import('@fastify/cors'), {
+//     origin: process.env.NODE_ENV === 'production'
+//         ? ['http://18.205.156.100', "https://watchfi.app", "https://www.watchfi.app", 'https://watchfi-server.onrender.com', 'https://watchfi-prod.onrender.com', "https://watchfi-client.vercel.app"] : true,
+//     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Include PUT
+//     allowedHeaders: ['Content-Type', 'Authorization'], // Include headers used in your requests
+//     credentials: true, // If your frontend sends cookies or auth headers
+//     preflight: true, // Enable preflight handling
+// });
 
 
 server.setSerializerCompiler(() => {
@@ -49,7 +49,7 @@ server.setSerializerCompiler(() => {
 });
 
 // Health check endpoint
-server.get('/health', async (_, reply: FastifyReply) => {
+server.get('/api/v1/health', async (_, reply: FastifyReply) => {
     try {
         await prisma.$queryRaw`SELECT 1`;
         return {
